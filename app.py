@@ -4,27 +4,25 @@ import numpy as np
 import os
 from datetime import datetime
 from ultralytics import YOLO
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
+from streamlit_webrtc import webrtc_streamer, VideoProcessorBase
 import av
 
 # ---------------------- CONFIGURE UI ----------------------
 st.set_page_config(page_title="YOLO Object Detection", layout="wide")
 st.sidebar.title("🔍 YOLO Object Detection with Storage")
 
-# Create a folder for storing captured images
 SAVE_DIR = "storage"
 if not os.path.exists(SAVE_DIR):
     os.makedirs(SAVE_DIR)
 
-# Load YOLO Model (replace with your model path)
 MODEL_PATH = "best.pt"
 model = YOLO(MODEL_PATH)
 
 # ---------------------- VIDEO PROCESSING ----------------------
-class YOLOVideoProcessor(VideoTransformerBase):
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")  # Convert frame to numpy array
-        results = model(img, verbose=False)  # Run YOLO detection
+class YOLOVideoProcessor(VideoProcessorBase):
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        img = frame.to_ndarray(format="bgr24")
+        results = model(img, verbose=False)
         
         for detection in results[0].boxes:
             xyxy = detection.xyxy.cpu().numpy().squeeze().astype(int)
@@ -42,12 +40,15 @@ class YOLOVideoProcessor(VideoTransformerBase):
 st.sidebar.markdown("### 🎥 Live Stream")
 webrtc_ctx = webrtc_streamer(
     key="yolo-stream",
-    video_transformer_factory=YOLOVideoProcessor,
+    video_processor_factory=YOLOVideoProcessor,
     async_processing=True
 )
 
 # ---------------------- CAPTURE IMAGE ----------------------
 def capture_image():
+    if webrtc_ctx is None:
+        st.sidebar.error("❌ Stream not active. Start the stream first.")
+        return
     if webrtc_ctx.video_receiver:
         frame = webrtc_ctx.video_receiver.last_frame
         if frame is not None:
@@ -56,7 +57,9 @@ def capture_image():
             cv2.imwrite(filename, img)
             st.sidebar.success(f"✅ Image saved: {filename}")
         else:
-            st.sidebar.error("❌ No frame captured!")
+            st.sidebar.error("❌ No frame available yet.")
+    else:
+        st.sidebar.error("❌ Start the video stream to capture images.")
 
 if st.sidebar.button("📸 Capture Image"):
     capture_image()
