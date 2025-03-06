@@ -4,3 +4,7 @@ numpy
 ultralytics
 streamlit-webrtc
 av
+torch
+torchvision
+torchaudio
+nest-asyncio
